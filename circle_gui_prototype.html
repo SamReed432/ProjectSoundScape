@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draggable Circle with Arrow and Console Logging</title>
+  <style>
+    canvas {
+      display: block;
+      margin: 20px auto;
+      background-color: #f0f0f0;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="circleCanvas" width="600" height="600"></canvas>
+<button id="logButton">Start Logging Degree to Console</button>
+
+<script>
+  const canvas = document.getElementById('circleCanvas');
+  const ctx = canvas.getContext('2d');
+  const logButton = document.getElementById('logButton');
+
+  const outerCircle = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    radius: 200,
+  };
+
+  let innerCircle = {
+    angle: 0, // in radians
+    radius: 20, // fixed inner circle size
+    dragging: false,
+  };
+
+  let loggingInterval = null;
+
+  // Function to get the inner circle position based on angle
+  function getInnerCirclePosition() {
+    return {
+      x: outerCircle.x + outerCircle.radius * Math.cos(innerCircle.angle),
+      y: outerCircle.y + outerCircle.radius * Math.sin(innerCircle.angle),
+    };
+  }
+
+  // Function to convert radians to degrees
+  function radiansToDegrees(radians) {
+    return (radians * 180 / Math.PI + 450) % 360; // Normalize within 0-360 degrees
+  }
+
+  // Function to draw the outer circle, inner circle, arrow, and angle text
+  function drawCircles() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw the outer circle
+    ctx.beginPath();
+    ctx.arc(outerCircle.x, outerCircle.y, outerCircle.radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.closePath();
+
+    // Draw the inner circle
+    const { x, y } = getInnerCirclePosition();
+    ctx.beginPath();
+    ctx.arc(x, y, innerCircle.radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'blue';
+    ctx.fill();
+    ctx.closePath();
+
+    // Calculate the current angle in degrees
+    const angleInDegrees = radiansToDegrees(innerCircle.angle);
+
+    // Draw the arrowhead pointing upwards
+    ctx.beginPath();
+    ctx.moveTo(outerCircle.x - 5, outerCircle.y - 20); // Left side of arrowhead (moved 5px up)
+    ctx.lineTo(outerCircle.x, outerCircle.y - 35);     // Tip of arrowhead (reversed to point upwards, moved 5px up)
+    ctx.lineTo(outerCircle.x + 5, outerCircle.y - 20); // Right side of arrowhead (moved 5px up)
+    ctx.fillStyle = 'black';
+    ctx.fill();
+    ctx.closePath();
+
+    // Draw the angle text at the center of the outer circle
+    ctx.font = '24px Arial';
+    ctx.fillStyle = 'black';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${Math.round(angleInDegrees)}°`, outerCircle.x, outerCircle.y);
+  }
+
+  // Convert cartesian coordinates to polar angle
+  function getAngleFromMouse(x, y) {
+    return Math.atan2(y - outerCircle.y, x - outerCircle.x);
+  }
+
+  // Mouse down event to start dragging
+  canvas.addEventListener('mousedown', (e) => {
+    const { x, y } = getInnerCirclePosition();
+    const dx = e.offsetX - x;
+    const dy = e.offsetY - y;
+    if (Math.sqrt(dx * dx + dy * dy) < innerCircle.radius) {
+      innerCircle.dragging = true;
+    }
+  });
+
+  // Mouse move event to drag the inner circle
+  canvas.addEventListener('mousemove', (e) => {
+    if (innerCircle.dragging) {
+      innerCircle.angle = getAngleFromMouse(e.offsetX, e.offsetY);
+      drawCircles();
+    }
+  });
+
+  // Mouse up event to stop dragging
+  canvas.addEventListener('mouseup', () => {
+    innerCircle.dragging = false;
+  });
+
+  // Mouse click event to teleport the inner circle
+  canvas.addEventListener('click', (e) => {
+    if (!innerCircle.dragging) {
+      innerCircle.angle = getAngleFromMouse(e.offsetX, e.offsetY);
+      drawCircles();
+    }
+  });
+
+  // Button click event to start logging the current angle in degrees
+  logButton.addEventListener('click', () => {
+    if (!loggingInterval) {
+      loggingInterval = setInterval(() => {
+        const angleInDegrees = radiansToDegrees(innerCircle.angle);
+        console.log(`Current Angle: ${Math.round(angleInDegrees)}°`);
+      }, 1000);
+    }
+  });
+
+  // Initial draw
+  drawCircles();
+</script>
+
+</body>
+</html>
