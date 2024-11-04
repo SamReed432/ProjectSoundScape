@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Draggable Circle with Arrow and Console Logging</title>
+  <title>3D Sound Editor - Draggable Circle</title>
   <style>
     canvas {
       display: block;
@@ -25,12 +25,14 @@
 <body>
 
 <canvas id="circleCanvas" width="600" height="600"></canvas>
-<button id="logButton">Start Logging Degree to Console</button>
+<button id="logButton">Start Logging to File</button>
+<a id="downloadLink" style="display: none;">Download Angle Log</a>
 
 <script>
   const canvas = document.getElementById('circleCanvas');
   const ctx = canvas.getContext('2d');
   const logButton = document.getElementById('logButton');
+  const downloadLink = document.getElementById('downloadLink');
 
   const outerCircle = {
     x: canvas.width / 2,
@@ -45,8 +47,9 @@
   };
 
   let loggingInterval = null;
+  let angleLog = []; // Array to store logged angle data
+  let startTime = null; // To store the start time in milliseconds
 
-  // Function to get the inner circle position based on angle
   function getInnerCirclePosition() {
     return {
       x: outerCircle.x + outerCircle.radius * Math.cos(innerCircle.angle),
@@ -54,16 +57,12 @@
     };
   }
 
-  // Function to convert radians to degrees
   function radiansToDegrees(radians) {
     return (radians * 180 / Math.PI + 450) % 360; // Normalize within 0-360 degrees
   }
 
-  // Function to draw the outer circle, inner circle, arrow, and angle text
   function drawCircles() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw the outer circle
     ctx.beginPath();
     ctx.arc(outerCircle.x, outerCircle.y, outerCircle.radius, 0, Math.PI * 2);
     ctx.strokeStyle = 'black';
@@ -71,7 +70,6 @@
     ctx.stroke();
     ctx.closePath();
 
-    // Draw the inner circle
     const { x, y } = getInnerCirclePosition();
     ctx.beginPath();
     ctx.arc(x, y, innerCircle.radius, 0, Math.PI * 2);
@@ -79,19 +77,7 @@
     ctx.fill();
     ctx.closePath();
 
-    // Calculate the current angle in degrees
     const angleInDegrees = radiansToDegrees(innerCircle.angle);
-
-    // Draw the arrowhead pointing upwards
-    ctx.beginPath();
-    ctx.moveTo(outerCircle.x - 5, outerCircle.y - 20); // Left side of arrowhead (moved 5px up)
-    ctx.lineTo(outerCircle.x, outerCircle.y - 35);     // Tip of arrowhead (reversed to point upwards, moved 5px up)
-    ctx.lineTo(outerCircle.x + 5, outerCircle.y - 20); // Right side of arrowhead (moved 5px up)
-    ctx.fillStyle = 'black';
-    ctx.fill();
-    ctx.closePath();
-
-    // Draw the angle text at the center of the outer circle
     ctx.font = '24px Arial';
     ctx.fillStyle = 'black';
     ctx.textAlign = 'center';
@@ -99,12 +85,10 @@
     ctx.fillText(`${Math.round(angleInDegrees)}°`, outerCircle.x, outerCircle.y);
   }
 
-  // Convert cartesian coordinates to polar angle
   function getAngleFromMouse(x, y) {
     return Math.atan2(y - outerCircle.y, x - outerCircle.x);
   }
 
-  // Mouse down event to start dragging
   canvas.addEventListener('mousedown', (e) => {
     const { x, y } = getInnerCirclePosition();
     const dx = e.offsetX - x;
@@ -114,7 +98,6 @@
     }
   });
 
-  // Mouse move event to drag the inner circle
   canvas.addEventListener('mousemove', (e) => {
     if (innerCircle.dragging) {
       innerCircle.angle = getAngleFromMouse(e.offsetX, e.offsetY);
@@ -122,12 +105,10 @@
     }
   });
 
-  // Mouse up event to stop dragging
   canvas.addEventListener('mouseup', () => {
     innerCircle.dragging = false;
   });
 
-  // Mouse click event to teleport the inner circle
   canvas.addEventListener('click', (e) => {
     if (!innerCircle.dragging) {
       innerCircle.angle = getAngleFromMouse(e.offsetX, e.offsetY);
@@ -135,17 +116,33 @@
     }
   });
 
-  // Button click event to start logging the current angle in degrees
   logButton.addEventListener('click', () => {
     if (!loggingInterval) {
+      angleLog = [];
+      startTime = Date.now(); // Set the start time
+      logButton.textContent = 'Stop Logging and Save';
       loggingInterval = setInterval(() => {
-        const angleInDegrees = radiansToDegrees(innerCircle.angle);
-        console.log(`Current Angle: ${Math.round(angleInDegrees)}°`);
-      }, 1000);
+        const currentTime = Date.now() - startTime;
+        const angleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
+        angleLog.push(`Time: ${currentTime} ms, Angle: ${angleInDegrees}°`);
+      }, 50);
+    } else {
+      clearInterval(loggingInterval);
+      loggingInterval = null;
+      logButton.textContent = 'Start Logging to File';
+      saveAngleLog();
     }
   });
 
-  // Initial draw
+  function saveAngleLog() {
+    const blob = new Blob(["SOUNDSCAPE_LOCATION_FILE_v1\n", angleLog.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    downloadLink.href = url;
+    downloadLink.download = 'angle_log.txt';
+    downloadLink.style.display = 'inline';
+    downloadLink.textContent = 'Download SoundScape File';
+  }
+
   drawCircles();
 </script>
 
