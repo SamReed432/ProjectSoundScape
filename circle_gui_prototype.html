@@ -20,18 +20,33 @@
       font-size: 16px;
       cursor: pointer;
     }
+    #saveForm {
+      display: none;
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
 
 <canvas id="circleCanvas" width="600" height="600"></canvas>
 <button id="logButton">Start Logging to File</button>
-<a id="downloadLink" style="display: none;">Download Angle Log</a>
+<div id="saveForm">
+  <label>
+    Project Name: <input type="text" id="projectName" required>
+  </label>
+  <label>
+    Audio File Name: <input type="text" id="audioFileName" required>
+  </label>
+  <button id="saveButton">Save to File</button>
+</div>
+<a id="downloadLink" style="display: none;">Download SoundScape File</a>
 
 <script>
   const canvas = document.getElementById('circleCanvas');
   const ctx = canvas.getContext('2d');
   const logButton = document.getElementById('logButton');
+  const saveForm = document.getElementById('saveForm');
+  const saveButton = document.getElementById('saveButton');
   const downloadLink = document.getElementById('downloadLink');
 
   const outerCircle = {
@@ -41,14 +56,15 @@
   };
 
   let innerCircle = {
-    angle: 0, // in radians
-    radius: 20, // fixed inner circle size
+    angle: 0,
+    radius: 20,
     dragging: false,
   };
 
   let loggingInterval = null;
-  let angleLog = []; // Array to store logged angle data
-  let startTime = null; // To store the start time in milliseconds
+  let angleLog = [];
+  let startTime = null;
+  let finalAngle = null;
 
   function getInnerCirclePosition() {
     return {
@@ -58,7 +74,7 @@
   }
 
   function radiansToDegrees(radians) {
-    return (radians * 180 / Math.PI + 450) % 360; // Normalize within 0-360 degrees
+    return (radians * 180 / Math.PI + 450) % 360;
   }
 
   function drawCircles() {
@@ -119,29 +135,46 @@
   logButton.addEventListener('click', () => {
     if (!loggingInterval) {
       angleLog = [];
-      startTime = Date.now(); // Set the start time
+      startTime = Date.now();
       logButton.textContent = 'Stop Logging and Save';
       loggingInterval = setInterval(() => {
         const currentTime = Date.now() - startTime;
         const angleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
-        angleLog.push(`Time: ${currentTime} ms, Angle: ${angleInDegrees}°`);
+        angleLog.push(`Time: ${currentTime} ms, Angle: ${angleInDegrees}`);
       }, 50);
     } else {
+      finalAngle = Math.round(radiansToDegrees(innerCircle.angle));
       clearInterval(loggingInterval);
       loggingInterval = null;
       logButton.textContent = 'Start Logging to File';
-      saveAngleLog();
+      saveForm.style.display = 'block';
     }
   });
 
-  function saveAngleLog() {
-    const blob = new Blob(["SOUNDSCAPE_LOCATION_FILE_v1\n", angleLog.join('\n')], { type: 'text/plain' });
+  saveButton.addEventListener('click', () => {
+    const projectName = document.getElementById('projectName').value.trim();
+    const audioFileName = document.getElementById('audioFileName').value.trim();
+
+    if (!projectName || !audioFileName) {
+      alert("Please enter both Project Name and Audio File Name.");
+      return;
+    }
+
+    const fileContent = "SOUNDSCAPE_LOCATION_FILE_v1\n" +
+                        projectName + '\n' +
+                        audioFileName + '\n' +
+                        angleLog.join('\n') + '\n' +
+                        'Time: FINAL ms, Angle: ' + finalAngle;
+
+    const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     downloadLink.href = url;
-    downloadLink.download = 'angle_log.txt';
+    downloadLink.download = `${projectName}.txt`;
     downloadLink.style.display = 'inline';
     downloadLink.textContent = 'Download SoundScape File';
-  }
+
+    saveForm.style.display = 'none';
+  });
 
   drawCircles();
 </script>
