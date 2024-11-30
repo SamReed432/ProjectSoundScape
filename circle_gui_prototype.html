@@ -24,12 +24,48 @@
       display: none;
       margin-top: 20px;
     }
+    #controls { 
+      margin-top: 10px; 
+    }
+    #seekBar { 
+      width: 50%; margin: 10px 0; 
+    }
+    #audioInput {
+      display: none; /* Hide the input itself */
+    }
+    #uploadAudioLabel {
+      display: inline-block;
+      padding: 10px 20px 10px 10px;
+      margin: 10px 10px 10px 10px;
+
+      cursor: pointer;
+      background-color: #007bff;
+      color: white;
+      border-radius: 5px;
+      font-size: 14px;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
 
-<canvas id="circleCanvas" width="600" height="600"></canvas>
+<canvas id="circleCanvas" width="450" height="450"></canvas>
 <button id="logButton">Start Logging to File</button>
+
+<div>
+  <label id="uploadAudioLabel" for="audioInput">Upload audio file</label>
+  <input type="file" id="audioInput" accept="audio/mp3, audio/mp4">
+<audio id="audioPlayer" controls style="display:none;"></audio>
+</div>
+
+
+<div id="controls" style="display:none;">
+  <button id="playPauseBtn">Play</button>
+  <span id="timeDisplay">0:00 / 0:00</span>
+  <input type="range" id="seekBar" value="0" step="0.1" min="0" max="100">
+</div>
+
 <div id="saveForm">
   <label>
     Project Name: <input type="text" id="projectName" required>
@@ -48,6 +84,66 @@
   const saveForm = document.getElementById('saveForm');
   const saveButton = document.getElementById('saveButton');
   const downloadLink = document.getElementById('downloadLink');
+
+  const audioInput = document.getElementById('audioInput');
+  const audioPlayer = document.getElementById('audioPlayer');
+  const playPauseBtn = document.getElementById('playPauseBtn');
+  const timeDisplay = document.getElementById('timeDisplay');
+  const seekBar = document.getElementById('seekBar');
+  const controls = document.getElementById('controls');
+
+  audioInput.addEventListener('change', handleFileUpload);
+
+
+  function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (file) {
+      const fileURL = URL.createObjectURL(file);
+      audioPlayer.src = fileURL;
+      controls.style.display = 'block';
+      // audioPlayer.style.display = 'block';
+      audioPlayer.load();
+    }
+  }
+  audioPlayer.addEventListener('loadedmetadata', () => {
+    const currentTime = formatTime(0);
+    const duration = formatTime(audioPlayer.duration || 0);
+    timeDisplay.textContent = `${currentTime} / ${duration}`;
+  });
+
+  playPauseBtn.addEventListener('click', togglePlayPause);
+
+  function togglePlayPause() {
+    if (audioPlayer.paused) {
+      audioPlayer.play();
+      playPauseBtn.textContent = 'Pause';
+    } else {
+      audioPlayer.pause();
+      playPauseBtn.textContent = 'Play';
+    }
+  }
+
+  // Update timestamp and seek bar as audio plays
+  audioPlayer.addEventListener('timeupdate', updateTime);
+
+  function updateTime() {
+    const currentTime = formatTime(audioPlayer.currentTime);
+    const duration = formatTime(audioPlayer.duration || 0);
+    timeDisplay.textContent = `${currentTime} / ${duration}`;
+    seekBar.value = (audioPlayer.currentTime / audioPlayer.duration) * 100 || 0;
+  }
+
+  // Seek functionality
+  seekBar.addEventListener('input', () => {
+    audioPlayer.currentTime = (seekBar.value / 100) * audioPlayer.duration;
+  });
+
+  // Utility function to format time in minutes and seconds
+  function formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  }
 
   const outerCircle = {
     x: canvas.width / 2,
