@@ -236,13 +236,23 @@
       loggingInterval = setInterval(() => {
         const currentTime = Date.now() - startTime;
         const angleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
-        angleLog.push(`Time: ${currentTime} ms, Angle: ${angleInDegrees}`);
+        angleLog.push([currentTime, angleInDegrees]); 
       }, 50);
     } else {
       finalAngle = Math.round(radiansToDegrees(innerCircle.angle));
       clearInterval(loggingInterval);
       loggingInterval = null;
       logButton.textContent = 'Start Logging to File';
+    
+      // console.log('Original Angles:', angleLog);
+
+      const normalizedLog = normalization(angleLog);
+      const angleOnlyLog = normalizedLog.map(([, angle]) => angle);
+      
+      // console.log('Normalized Angles:', normalizedLog);
+
+
+      angleLog = angleOnlyLog;
       saveForm.style.display = 'block';
     }
   });
@@ -259,8 +269,9 @@
     const fileContent = "SOUNDSCAPE_LOCATION_FILE_v1\n" +
                         projectName + '\n' +
                         audioFileName + '\n' +
+                        '50ms\n' + 
                         angleLog.join('\n') + '\n' +
-                        'Time: FINAL ms, Angle: ' + finalAngle;
+                        finalAngle;
 
     const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -271,6 +282,33 @@
 
     saveForm.style.display = 'none';
   });
+
+  //func to forece location to be every 50ms
+  function normalization(recorded, interval = 50) {
+    if (recorded.length < 2) return [];
+
+    const normalized = [];
+    const startTime = 0;
+    const endTime = recorded[recorded.length - 1][0];
+
+    for (let t = startTime; t <= endTime; t += interval) {
+      let i = 0;
+      while (i < recorded.length - 1 && recorded[i + 1][0] < t) {
+        i++;
+      }
+
+      //Just doing linear prediction -> find closest points and then predict based on slope
+      const [t1, angle1] = recorded[i];
+      const [t2, angle2] = recorded[i + 1] || [t1, angle1];
+      const slope = (angle2 - angle1) / (t2 - t1 || 1);
+      const interpolatedAngle = angle1 + slope * (t - t1);
+
+      normalized.push([t, interpolatedAngle]);
+    }
+
+    return normalized;
+  }
+
 
   drawCircles();
 </script>
