@@ -185,3 +185,11 @@ canvas {
   .slider.round:before {
     border-radius: 50%;
   }
+
+  .big_button {
+    border: 1rem white solid;
+    border-radius: 0.5rem;
+
+    color: white;
+    font-size: 2rem;
+  }
