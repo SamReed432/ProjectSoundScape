@@ -4,54 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>3D Sound Editor - Draggable Circle</title>
-  <style>
-    canvas {
-      display: block;
-      margin: 20px auto;
-      background-color: #f0f0f0;
-    }
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-    }
-    button {
-      margin-top: 20px;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-    #saveForm {
-      display: none;
-      margin-top: 20px;
-    }
-    #controls { 
-      margin-top: 10px; 
-    }
-    #seekBar { 
-      width: 50%; margin: 10px 0; 
-    }
-    #audioInput {
-      display: none; /* Hide the input itself */
-    }
-    #uploadAudioLabel {
-      display: inline-block;
-      padding: 10px 20px 10px 10px;
-      margin: 10px 10px 10px 10px;
-
-      cursor: pointer;
-      background-color: #007bff;
-      color: white;
-      border-radius: 5px;
-      font-size: 14px;
-      font-family: Arial, sans-serif;
-      text-align: center;
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<header>
+  <h1>Project SoundScape</h1>
+  <div id="nav">
+    <a href="/circle_gui_prototype.html" style="text-decoration: underline;">Digital Mixer</a>
+    <a href="/index.html">Home</a>
+  </div>
+</header>
 
 <canvas id="circleCanvas" width="450" height="450"></canvas>
-<button id="logButton">Start Logging to File</button>
+<!-- <button id="logButton">Start Logging to File</button> -->
 
 <div>
   <label id="uploadAudioLabel" for="audioInput">Upload audio file</label>
@@ -59,6 +24,15 @@
 <audio id="audioPlayer" controls style="display:none;"></audio>
 </div>
 
+<!-- Edi  / Review Mode Toggle -->
+<div id="toggle">
+  <p>Edit</p>
+  <label class="switch">
+    <input type="checkbox" id="modeToggle">
+    <span class="slider"></span>
+  </label>
+  <p>Review</p>
+</div>
 
 <div id="controls" style="display:none;">
   <button id="playPauseBtn">Play</button>
@@ -91,12 +65,31 @@
   const timeDisplay = document.getElementById('timeDisplay');
   const seekBar = document.getElementById('seekBar');
   const controls = document.getElementById('controls');
+  const toggleModeButton = document.getElementById('modeToggle');
+
+  let isLogging = false;
+  let editMode = true;
+  let audioFileName = "";
+
+  toggleModeButton.addEventListener('change', () => {
+    editMode = !editMode;
+    if (editMode) {
+      playPauseBtn.disabled = false;  // Allow play in edit mode
+      console.log("Edit Mode");
+    } else {
+      playPauseBtn.disabled = false;  // Allow play in review mode
+      console.log("Review Mode");
+      if (innerCircle.dragging) {
+        innerCircle.dragging = false;  // Stop dragging in review mode
+      }
+    }
+  });
 
   audioInput.addEventListener('change', handleFileUpload);
 
-
   function handleFileUpload(event) {
     const file = event.target.files[0];
+    audioFileName = file;
     if (file) {
       const fileURL = URL.createObjectURL(file);
       audioPlayer.src = fileURL;
@@ -117,21 +110,119 @@
     if (audioPlayer.paused) {
       audioPlayer.play();
       playPauseBtn.textContent = 'Pause';
+
+      // Start or resume logging if in edit mode and not dragging
+      if (!isLogging && editMode && !innerCircle.dragging) {
+        startTime = Date.now() - (audioPlayer.currentTime * 1000); // Adjust for resumed playback
+        isLogging = true;
+        loggingInterval = setInterval(() => {
+          const currentTime = Date.now() - startTime;
+          const angleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
+          updateOrAddToLog(currentTime, angleInDegrees);
+        }, 50);
+      }
     } else {
       audioPlayer.pause();
       playPauseBtn.textContent = 'Play';
+
+      // Pause logging
+      if (isLogging) {
+        clearInterval(loggingInterval);
+        loggingInterval = null;
+        isLogging = false;
+      }
     }
   }
+  // Ensure logging stops when audio ends
+  audioPlayer.addEventListener('ended', () => {
+  playPauseBtn.textContent = 'Play';
+  
+  // Stop logging if it was active
+  if (isLogging) {
+    clearInterval(loggingInterval);
+    loggingInterval = null;
+    isLogging = false;
+  }
+  
+  // Show the save form
+  saveForm.style.display = 'block';
+});
 
   // Update timestamp and seek bar as audio plays
   audioPlayer.addEventListener('timeupdate', updateTime);
 
-  function updateTime() {
-    const currentTime = formatTime(audioPlayer.currentTime);
-    const duration = formatTime(audioPlayer.duration || 0);
-    timeDisplay.textContent = `${currentTime} / ${duration}`;
-    seekBar.value = (audioPlayer.currentTime / audioPlayer.duration) * 100 || 0;
+  function startLogging() {
+    isLogging = true;
+    startTime = Date.now();
+    loggingInterval = setInterval(() => {
+      const currentTime = Date.now() - startTime;
+      const angleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
+      angleLog.push([currentTime, angleInDegrees]); 
+    }, 50);
   }
+
+  function stopLogging() {
+    isLogging = false;
+    finalAngle = Math.round(radiansToDegrees(innerCircle.angle));
+    clearInterval(loggingInterval);
+    loggingInterval = null;
+
+    const normalizedLog = normalization(angleLog);
+    const angleOnlyLog = normalizedLog.map(([, angle]) => angle);
+    angleLog = angleOnlyLog;
+
+    saveForm.style.display = 'block'; // Display save form when logging stops
+  }
+
+  function updateTime() {
+    const currentTime = Math.round(audioPlayer.currentTime * 1000); // Convert to ms
+    const duration = formatTime(audioPlayer.duration || 0);
+    timeDisplay.textContent = `${formatTime(audioPlayer.currentTime)} / ${duration}`;
+    seekBar.value = (audioPlayer.currentTime / audioPlayer.duration) * 100 || 0;
+
+    if (!editMode) {
+      // Interpolate and render angle for review mode
+      const interpolatedAngle = interpolateAngle(currentTime);
+      if (interpolatedAngle !== null) {
+        innerCircle.angle = ((interpolatedAngle - 450) % 360) * (Math.PI / 180);
+        drawCircles();
+      }
+      return;
+    }
+
+    // In edit mode, update or log the current angle
+    const angleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
+    updateOrAddToLog(currentTime, angleInDegrees);
+  }
+
+  function updateOrAddToLog(currentTime, newAngleInDegrees) {
+    // Find the entry for the current timestamp
+    const entryIndex = angleLog.findIndex(([time]) => Math.abs(time - currentTime) < 50);
+    
+    if (entryIndex !== -1) {
+      // Overwrite existing entry
+      angleLog[entryIndex][1] = newAngleInDegrees;
+    } else {
+      // Add a new entry
+      angleLog.push([currentTime, newAngleInDegrees]);
+      angleLog.sort((a, b) => a[0] - b[0]); // Keep logs sorted
+    }
+  }
+
+  function updateTimestampAfterDrag() {
+    if (!editMode) return; // Only update in edit mode
+    const currentTime = Math.round(audioPlayer.currentTime * 1000); // Convert to ms
+    const newAngleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
+    updateOrAddToLog(currentTime, newAngleInDegrees);
+  }
+
+  canvas.addEventListener('mouseup', () => {
+    if (innerCircle.dragging && editMode) {
+      innerCircle.dragging = false;
+      updateTimestampAfterDrag(); // Log final position after dragging ends
+    }
+  });
+
 
   // Seek functionality
   seekBar.addEventListener('input', () => {
@@ -211,14 +302,10 @@
   });
 
   canvas.addEventListener('mousemove', (e) => {
-    if (innerCircle.dragging) {
+    if (innerCircle.dragging && editMode) {
       innerCircle.angle = getAngleFromMouse(e.offsetX, e.offsetY);
       drawCircles();
     }
-  });
-
-  canvas.addEventListener('mouseup', () => {
-    innerCircle.dragging = false;
   });
 
   canvas.addEventListener('click', (e) => {
@@ -228,44 +315,15 @@
     }
   });
 
-  logButton.addEventListener('click', () => {
-    if (!loggingInterval) {
-      angleLog = [];
-      startTime = Date.now();
-      logButton.textContent = 'Stop Logging and Save';
-      loggingInterval = setInterval(() => {
-        const currentTime = Date.now() - startTime;
-        const angleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
-        angleLog.push([currentTime, angleInDegrees]); 
-      }, 50);
-    } else {
-      finalAngle = Math.round(radiansToDegrees(innerCircle.angle));
-      clearInterval(loggingInterval);
-      loggingInterval = null;
-      logButton.textContent = 'Start Logging to File';
-    
-      // console.log('Original Angles:', angleLog);
-
-      const normalizedLog = normalization(angleLog);
-      const angleOnlyLog = normalizedLog.map(([, angle]) => angle);
-      
-      // console.log('Normalized Angles:', normalizedLog);
-
-
-      angleLog = angleOnlyLog;
-      saveForm.style.display = 'block';
-    }
-  });
-
   saveButton.addEventListener('click', () => {
     const projectName = document.getElementById('projectName').value.trim();
-    const audioFileName = document.getElementById('audioFileName').value.trim();
+
 
     if (!projectName || !audioFileName) {
       alert("Please enter both Project Name and Audio File Name.");
       return;
     }
-
+    angleLog = angleLog.sort((a, b) => a[0] - b[0]);
     const fileContent = "SOUNDSCAPE_LOCATION_FILE_v1\n" +
                         projectName + '\n' +
                         audioFileName + '\n' +
@@ -308,6 +366,48 @@
 
     return normalized;
   }
+
+  function interpolateAngle(currentTime) {
+    if (angleLog.length === 0) return null;
+    let prev = null;
+    let next = null;
+
+    for (let i = 0; i < angleLog.length; i++) {
+      const [time] = angleLog[i];
+      if (time <= currentTime) {
+        prev = angleLog[i];
+      } else {
+        next = angleLog[i];
+        break;
+      }
+    }
+
+    if (!prev) return null; // Before first timestamp
+    if (!next) return prev[1]; // After last timestamp
+
+    const [t1, a1] = prev;
+    const [t2, a2] = next;
+
+    // Linear interpolation
+    const ratio = (currentTime - t1) / (t2 - t1);
+    return a1 + ratio * (a2 - a1);
+  }
+
+  function findAngleForTimestamp(timestamp) {
+    // Find the nearest timestamp in the log
+    const entry = angleLog.find(([time]) => Math.abs(time - timestamp) < 50);
+    return entry ? entry[1] : null; // Return the angle in degrees if found
+  }
+
+  function findIndexForCurrentTime(currentTime) {
+  // Look for the closest time in the angleLog to the current time
+  for (let i = 0; i < angleLog.length; i++) {
+    if (Math.abs(angleLog[i][0] - currentTime) < 50) { // Adjust tolerance as needed
+      return i;
+    }
+  }
+  return -1; // No match found
+}
 
 
   drawCircles();
