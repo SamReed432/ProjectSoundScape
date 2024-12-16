@@ -7,13 +7,13 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header>
-  <h1>Project SoundScape</h1>
-  <div id="nav">
-    <a href="/circle_gui_prototype.html" style="text-decoration: underline;">Digital Mixer</a>
-    <a href="/index.html">Home</a>
-  </div>
-</header>
+  <header>
+    <h1><a href="/ProjectSoundScape/index.html">Project SoundScape</a></h1>
+    <div id="nav">
+      <a href="/ProjectSoundScape/circle_gui_prototype.html" style="text-decoration: underline;">Digital Mixer</a>
+      <a href="/ProjectSoundScape/index.html">Home</a>
+    </div>
+  </header>
 
 <canvas id="circleCanvas" width="450" height="450"></canvas>
 <!-- <button id="logButton">Start Logging to File</button> -->
@@ -144,6 +144,12 @@
     isLogging = false;
   }
   
+    const normalizedLog = normalization(angleLog);
+      const angleOnlyLog = normalizedLog.map(([, angle]) => angle);
+      
+      // console.log('Normalized Angles:', normalizedLog);
+      angleLog = angleOnlyLog;
+
   // Show the save form
   saveForm.style.display = 'block';
 });
@@ -216,14 +222,6 @@
     updateOrAddToLog(currentTime, newAngleInDegrees);
   }
 
-  canvas.addEventListener('mouseup', () => {
-    if (innerCircle.dragging && editMode) {
-      innerCircle.dragging = false;
-      updateTimestampAfterDrag(); // Log final position after dragging ends
-    }
-  });
-
-
   // Seek functionality
   seekBar.addEventListener('input', () => {
     audioPlayer.currentTime = (seekBar.value / 100) * audioPlayer.duration;
@@ -293,20 +291,41 @@
   }
 
   canvas.addEventListener('mousedown', (e) => {
-    const { x, y } = getInnerCirclePosition();
-    const dx = e.offsetX - x;
-    const dy = e.offsetY - y;
-    if (Math.sqrt(dx * dx + dy * dy) < innerCircle.radius) {
-      innerCircle.dragging = true;
-    }
-  });
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
 
-  canvas.addEventListener('mousemove', (e) => {
-    if (innerCircle.dragging && editMode) {
-      innerCircle.angle = getAngleFromMouse(e.offsetX, e.offsetY);
-      drawCircles();
-    }
-  });
+  const dx = mouseX - outerCircle.x;
+  const dy = mouseY - outerCircle.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  if (Math.abs(distance - outerCircle.radius) <= innerCircle.radius) {
+    innerCircle.dragging = true;
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (innerCircle.dragging && editMode) {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Calculate angle
+    const dx = mouseX - outerCircle.x;
+    const dy = mouseY - outerCircle.y;
+    innerCircle.angle = Math.atan2(dy, dx);
+
+    drawCircles();
+  }
+});
+
+canvas.addEventListener('mouseup', () => {
+  if (innerCircle.dragging) {
+    innerCircle.dragging = false;
+    updateTimestampAfterDrag();
+  }
+});
+
 
   canvas.addEventListener('click', (e) => {
     if (!innerCircle.dragging) {
@@ -317,6 +336,7 @@
 
   saveButton.addEventListener('click', () => {
     const projectName = document.getElementById('projectName').value.trim();
+    audioFileName = document.getElementById('audioFileName').value.trim();
 
 
     if (!projectName || !audioFileName) {
@@ -326,8 +346,8 @@
     angleLog = angleLog.sort((a, b) => a[0] - b[0]);
     const fileContent = "SOUNDSCAPE_LOCATION_FILE_v1\n" +
                         projectName + '\n' +
-                        audioFileName + '\n' +
                         '50ms\n' + 
+                        audioFileName + '\n' +
                         angleLog.join('\n') + '\n' +
                         finalAngle;
 
@@ -335,7 +355,7 @@
     const url = URL.createObjectURL(blob);
     downloadLink.href = url;
     downloadLink.download = `${projectName}.txt`;
-    downloadLink.style.display = 'inline';
+    downloadLink.style.display = 'inline-block';
     downloadLink.textContent = 'Download SoundScape File';
 
     saveForm.style.display = 'none';
