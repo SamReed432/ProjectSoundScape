@@ -118,7 +118,7 @@ canvas {
     display: flex;
     align-items: center;
     justify-self: center;
-    justify-content: space-between;
+    justify-content: center;
   }
 
   #toggle p {
