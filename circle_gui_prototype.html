@@ -16,7 +16,6 @@
   </header>
 
 <canvas id="circleCanvas" width="450" height="450"></canvas>
-<!-- <button id="logButton">Start Logging to File</button> -->
 
 <div>
   <label id="uploadAudioLabel" for="audioInput">Upload audio file</label>
@@ -24,7 +23,7 @@
 <audio id="audioPlayer" controls style="display:none;"></audio>
 </div>
 
-<!-- Edi  / Review Mode Toggle -->
+<!-- Edit  / Review Mode Toggle -->
 <div id="toggle">
   <p>Edit</p>
   <label class="switch">
@@ -49,7 +48,7 @@
   </label>
   <button id="saveButton">Save to File</button>
 </div>
-<a id="downloadLink" style="display: none;">Download SoundScape File</a>
+<a id="downloadLink" style="display:none;">Download SoundScape File</a>
 
 <script>
   const canvas = document.getElementById('circleCanvas');
@@ -67,21 +66,22 @@
   const controls = document.getElementById('controls');
   const toggleModeButton = document.getElementById('modeToggle');
 
-  let isLogging = false;
+  const outerCircle = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    radius: 200,
+  };
+
   let editMode = true;
-  let audioFileName = "";
+  let audioFiles = [];
+  let soundDots = [];
+  let positionLogs = [];
+
 
   toggleModeButton.addEventListener('change', () => {
     editMode = !editMode;
-    if (editMode) {
-      playPauseBtn.disabled = false;  // Allow play in edit mode
-      console.log("Edit Mode");
-    } else {
-      playPauseBtn.disabled = false;  // Allow play in review mode
-      console.log("Review Mode");
-      if (innerCircle.dragging) {
-        innerCircle.dragging = false;  // Stop dragging in review mode
-      }
+    if (!editMode) {
+      soundDots.forEach(dot => dot.dragging = false);
     }
   });
 
@@ -89,20 +89,39 @@
 
   function handleFileUpload(event) {
     const file = event.target.files[0];
-    audioFileName = file;
     if (file) {
       const fileURL = URL.createObjectURL(file);
-      audioPlayer.src = fileURL;
-      controls.style.display = 'block';
-      // audioPlayer.style.display = 'block';
-      audioPlayer.load();
+      const fileIndex = audioFiles.length;
+
+      audioFiles.push({
+                        name: file.name,
+                        url: fileURL,
+      });
+
+      soundDots.push({
+                      x: outerCircle.x + outerCircle.radius * Math.cos(90),
+                      y: outerCircle.y + outerCircle.radius * Math.sin(90),
+                      radius: 20,
+                      dragging: false,
+                      fileIndex,
+                      angle: 0,
+      });
+
+      positionLogs.push([]);
+
+      if (audioFiles.length === 1) {
+        audioPlayer.src = fileURL;
+        controls.style.display = 'block';
+        audioPlayer.load();
+      }
     }
   }
-  audioPlayer.addEventListener('loadedmetadata', () => {
-    const currentTime = formatTime(0);
-    const duration = formatTime(audioPlayer.duration || 0);
-    timeDisplay.textContent = `${currentTime} / ${duration}`;
-  });
+  
+  // audioPlayer.addEventListener('loadedmetadata', () => {
+  //   const currentTime = formatTime(0);
+  //   const duration = formatTime(audioPlayer.duration || 0);
+  //   timeDisplay.textContent = `${currentTime} / ${duration}`;
+  // });
 
   playPauseBtn.addEventListener('click', togglePlayPause);
 
@@ -112,98 +131,38 @@
       playPauseBtn.textContent = 'Pause';
 
       // Start or resume logging if in edit mode and not dragging
-      if (!isLogging && editMode && !innerCircle.dragging) {
-        startTime = Date.now() - (audioPlayer.currentTime * 1000); // Adjust for resumed playback
-        isLogging = true;
-        loggingInterval = setInterval(() => {
-          const currentTime = Date.now() - startTime;
-          const angleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
-          updateOrAddToLog(currentTime, angleInDegrees);
-        }, 50);
+      if (editMode) {
+        startLogging();
       }
     } else {
       audioPlayer.pause();
       playPauseBtn.textContent = 'Play';
-
-      // Pause logging
-      if (isLogging) {
-        clearInterval(loggingInterval);
-        loggingInterval = null;
-        isLogging = false;
-      }
     }
   }
-  // Ensure logging stops when audio ends
-  audioPlayer.addEventListener('ended', () => {
-  playPauseBtn.textContent = 'Play';
-  
-  // Stop logging if it was active
-  if (isLogging) {
-    clearInterval(loggingInterval);
-    loggingInterval = null;
-    isLogging = false;
-  }
-  
-    const normalizedLog = normalization(angleLog);
-      const angleOnlyLog = normalizedLog.map(([, angle]) => angle);
-      
-      // console.log('Normalized Angles:', normalizedLog);
-      angleLog = angleOnlyLog;
-
-  // Show the save form
-  saveForm.style.display = 'block';
-});
-
-  // Update timestamp and seek bar as audio plays
-  audioPlayer.addEventListener('timeupdate', updateTime);
 
   function startLogging() {
-    isLogging = true;
-    startTime = Date.now();
+    let startTime = Date.now() - (audioPlayer.currentTime * 1000);
+
     loggingInterval = setInterval(() => {
       const currentTime = Date.now() - startTime;
-      const angleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
-      angleLog.push([currentTime, angleInDegrees]); 
+      soundDots.forEach((dot, i) => {
+        const angleInDegrees = Math.round(radiansToDegrees(dot.angle));
+        updateOrAddToLog(i, currentTime, angleInDegrees);
+      });
     }, 50);
   }
 
   function stopLogging() {
-    isLogging = false;
-    finalAngle = Math.round(radiansToDegrees(innerCircle.angle));
     clearInterval(loggingInterval);
     loggingInterval = null;
-
-    const normalizedLog = normalization(angleLog);
-    const angleOnlyLog = normalizedLog.map(([, angle]) => angle);
-    angleLog = angleOnlyLog;
-
-    saveForm.style.display = 'block'; // Display save form when logging stops
   }
 
-  function updateTime() {
-    const currentTime = Math.round(audioPlayer.currentTime * 1000); // Convert to ms
-    const duration = formatTime(audioPlayer.duration || 0);
-    timeDisplay.textContent = `${formatTime(audioPlayer.currentTime)} / ${duration}`;
-    seekBar.value = (audioPlayer.currentTime / audioPlayer.duration) * 100 || 0;
+  
+  function updateOrAddToLog(fileIndex, currentTime, newAngleInDegrees) {
+    let log = positionLogs[fileIndex];
 
-    if (!editMode) {
-      // Interpolate and render angle for review mode
-      const interpolatedAngle = interpolateAngle(currentTime);
-      if (interpolatedAngle !== null) {
-        innerCircle.angle = ((interpolatedAngle - 450) % 360) * (Math.PI / 180);
-        drawCircles();
-      }
-      return;
-    }
-
-    // In edit mode, update or log the current angle
-    const angleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
-    updateOrAddToLog(currentTime, angleInDegrees);
-  }
-
-  function updateOrAddToLog(currentTime, newAngleInDegrees) {
     // Find the entry for the current timestamp
-    const entryIndex = angleLog.findIndex(([time]) => Math.abs(time - currentTime) < 50);
+    const entryIndex = log.findIndex(([time]) => Math.abs(time - currentTime) < 50);
     
     if (entryIndex !== -1) {
       // Overwrite existing entry
@@ -215,12 +174,116 @@
     }
   }
 
+    // Ensure logging stops when audio ends
+  audioPlayer.addEventListener('ended', () => {
+    playPauseBtn.textContent = 'Play';
+    stopLogging();
+  });
+
+  // Update timestamp and seek bar as audio plays
+  audioPlayer.addEventListener('timeupdate', () => {
+    const currentTime = Math.round(audioPlayer.currentTime * 1000); // Convert to ms
+    const duration = formatTime(audioPlayer.duration || 0);
+    timeDisplay.textContent = `${formatTime(audioPlayer.currentTime)} / ${duration}`;
+    seekBar.value = (audioPlayer.currentTime / audioPlayer.duration) * 100 || 0;
+
+    if (!editMode) {
+      soundDots.forEach((dot, i) => {
+        // Interpolate and render angle for review mode
+        const interpolatedAngle = interpolateAngle(currentTime);
+        if (interpolatedAngle !== null) {
+          dot.angle = ((interpolatedAngle - 450) % 360) * (Math.PI / 180);
+          drawCircles();
+        }
+      });
+    }
+  });
+
+  function drawCircles() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw the outer circle
+    ctx.beginPath();
+    ctx.arc(outerCircle.x, outerCircle.y, outerCircle.radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'gray';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.closePath();
+
+    // Draw each sound dot
+    soundDots.forEach(dot => {  
+        ctx.beginPath();
+        ctx.arc(dot.x, dot.y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = 'blue';
+        ctx.fill();
+        ctx.closePath();
+    });
+  }
+
+  canvas.addEventListener('mousedown', (e) => {
+    soundDots.forEach(dot => {
+     if (Math.hypot(e.offsetX - dot.x, e.offsetY - dot.y) <= dot.radius) {
+       dot.dragging = true;
+     }
+    });
+
+    drawCircles();
+  // const rect = canvas.getBoundingClientRect();
+  // const mouseX = e.clientX - rect.left;
+  // const mouseY = e.clientY - rect.top;
+
+  // const dx = mouseX - outerCircle.x;
+  // const dy = mouseY - outerCircle.y;
+  // const distance = Math.sqrt(dx * dx + dy * dy);
+
+  // if (Math.abs(distance - outerCircle.radius) <= innerCircle.radius) {
+  //   innerCircle.dragging = true;
+  // }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  soundDots.forEach(dot => {
+    if (dot.dragging && editMode) {
+      const dx = e.offsetX - outerCircle.x;
+      const dy = e.offsetY - outerCircle.y;
+      const angle = Math.atan2(dy, dx);
+
+      dot.x = outerCircle.x + outerCircle.radius * Math.cos(angle);
+      dot.y = outerCircle.y + outerCircle.radius * Math.sin(angle);
+      dot.angle = angle;
+    }
+  });
+  // if (innerCircle.dragging && editMode) {
+  //   const rect = canvas.getBoundingClientRect();
+  //   const mouseX = e.clientX - rect.left;
+  //   const mouseY = e.clientY - rect.top;
+
+  //   // Calculate angle
+  //   const dx = mouseX - outerCircle.x;
+  //   const dy = mouseY - outerCircle.y;
+  //   innerCircle.angle = Math.atan2(dy, dx);
+
+  //   drawCircles();
+  // }
+  drawCircles();
+});
+
+canvas.addEventListener('mouseup', () => {
+  soundDots.forEach(dot => {
+    dot.dragging = false;
+  })
+   drawCircles();
+});
+
+
+
   function updateTimestampAfterDrag() {
     if (!editMode) return; // Only update in edit mode
     const currentTime = Math.round(audioPlayer.currentTime * 1000); // Convert to ms
     const newAngleInDegrees = Math.round(radiansToDegrees(innerCircle.angle));
     updateOrAddToLog(currentTime, newAngleInDegrees);
   }
+
 
   // Seek functionality
   seekBar.addEventListener('input', () => {
@@ -234,112 +297,25 @@
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   }
 
-  const outerCircle = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    radius: 200,
-  };
-
-  let innerCircle = {
-    angle: 0,
-    radius: 20,
-    dragging: false,
-  };
-
   let loggingInterval = null;
   let angleLog = [];
   let startTime = null;
   let finalAngle = null;
 
-  function getInnerCirclePosition() {
-    return {
-      x: outerCircle.x + outerCircle.radius * Math.cos(innerCircle.angle),
-      y: outerCircle.y + outerCircle.radius * Math.sin(innerCircle.angle),
-    };
-  }
 
   function radiansToDegrees(radians) {
     return (radians * 180 / Math.PI + 450) % 360;
   }
 
-  function drawCircles() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.beginPath();
-    ctx.arc(outerCircle.x, outerCircle.y, outerCircle.radius, 0, Math.PI * 2);
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.closePath();
-
-    const { x, y } = getInnerCirclePosition();
-    ctx.beginPath();
-    ctx.arc(x, y, innerCircle.radius, 0, Math.PI * 2);
-    ctx.fillStyle = 'blue';
-    ctx.fill();
-    ctx.closePath();
-
-    const angleInDegrees = radiansToDegrees(innerCircle.angle);
-    ctx.font = '24px Arial';
-    ctx.fillStyle = 'black';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${Math.round(angleInDegrees)}°`, outerCircle.x, outerCircle.y);
-  }
-
-  function getAngleFromMouse(x, y) {
-    return Math.atan2(y - outerCircle.y, x - outerCircle.x);
-  }
-
-  canvas.addEventListener('mousedown', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
-
-  const dx = mouseX - outerCircle.x;
-  const dy = mouseY - outerCircle.y;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-
-  if (Math.abs(distance - outerCircle.radius) <= innerCircle.radius) {
-    innerCircle.dragging = true;
-  }
-});
-
-canvas.addEventListener('mousemove', (e) => {
-  if (innerCircle.dragging && editMode) {
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    // Calculate angle
-    const dx = mouseX - outerCircle.x;
-    const dy = mouseY - outerCircle.y;
-    innerCircle.angle = Math.atan2(dy, dx);
-
-    drawCircles();
-  }
-});
-
-canvas.addEventListener('mouseup', () => {
-  if (innerCircle.dragging) {
-    innerCircle.dragging = false;
-    updateTimestampAfterDrag();
-  }
-});
 
 
-  canvas.addEventListener('click', (e) => {
-    if (!innerCircle.dragging) {
-      innerCircle.angle = getAngleFromMouse(e.offsetX, e.offsetY);
-      drawCircles();
-    }
-  });
+  /****SAVING*****/
 
   saveButton.addEventListener('click', () => {
     const projectName = document.getElementById('projectName').value.trim();
-    audioFileName = document.getElementById('audioFileName').value.trim();
 
 
-    if (!projectName || !audioFileName) {
+    if (!projectName || !audioFiles[0]) {
       alert("Please enter both Project Name and Audio File Name.");
       return;
     }
@@ -347,7 +323,7 @@ canvas.addEventListener('mouseup', () => {
     const fileContent = "SOUNDSCAPE_LOCATION_FILE_v1\n" +
                         projectName + '\n' +
                         '50ms\n' + 
-                        audioFileName + '\n' +
+                        audioFiles[0].name + '\n' +
                         angleLog.join('\n') + '\n' +
                         finalAngle;
 
@@ -387,6 +363,7 @@ canvas.addEventListener('mouseup', () => {
     return normalized;
   }
 
+  //Helper Func to guess angle based on time
   function interpolateAngle(currentTime) {
     if (angleLog.length === 0) return null;
     let prev = null;
@@ -412,23 +389,6 @@ canvas.addEventListener('mouseup', () => {
     const ratio = (currentTime - t1) / (t2 - t1);
     return a1 + ratio * (a2 - a1);
   }
-
-  function findAngleForTimestamp(timestamp) {
-    // Find the nearest timestamp in the log
-    const entry = angleLog.find(([time]) => Math.abs(time - timestamp) < 50);
-    return entry ? entry[1] : null; // Return the angle in degrees if found
-  }
-
-  function findIndexForCurrentTime(currentTime) {
-  // Look for the closest time in the angleLog to the current time
-  for (let i = 0; i < angleLog.length; i++) {
-    if (Math.abs(angleLog[i][0] - currentTime) < 50) { // Adjust tolerance as needed
-      return i;
-    }
-  }
-  return -1; // No match found
-}
-
 
   drawCircles();
 </script>
