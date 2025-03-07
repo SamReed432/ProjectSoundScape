@@ -41,6 +41,10 @@
       margin: 5px 0;
       text-align: center;
     }
+    /* Hide individual audio players */
+    .hidden-audio {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -52,7 +56,7 @@
     </div>
   </header>
 
-  <!-- Editor container with centered canvas and track controls -->
+  <!-- Editor container with canvas and track controls -->
   <div id="editorContainer">
     <canvas id="circleCanvas" width="450" height="450"></canvas>
     <div id="trackControls">
@@ -61,19 +65,20 @@
     </div>
   </div>
 
-  <div>
+  <div style="text-align:center; margin-top:10px;">
     <label id="uploadAudioLabel" for="audioInput">Upload audio file</label>
     <input type="file" id="audioInput" accept="audio/mp3, audio/mp4" />
-    <audio id="audioPlayer" controls style="display:none;"></audio>
   </div>
 
-  <div id="controls" style="display:none;">
+  <!-- Global Playback Controls -->
+  <div id="controls" style="text-align:center; margin-top:20px;">
     <button id="playPauseBtn">Play</button>
     <span id="timeDisplay">0:00 / 0:00</span>
-    <input type="range" id="seekBar" value="0" step="0.1" min="0" max="100" />
+    <br />
+    <input type="range" id="seekBar" value="0" step="0.1" min="0" max="100" style="width:300px;" />
   </div>
 
-  <div id="saveForm">
+  <div id="saveForm" style="text-align:center; margin-top:20px;">
     <label>
       Project Name: <input type="text" id="projectName" required />
     </label>
@@ -82,74 +87,83 @@
     </label>
     <button id="saveButton">Save to File</button>
   </div>
-  <a id="downloadLink" style="display:none;">Download SoundScape File</a>
+  <a id="downloadLink" style="display:none; margin-top:10px;">Download SoundScape File</a>
 
   <script>
+    // --- Canvas & Drawing ---
     const canvas = document.getElementById('circleCanvas');
     const ctx = canvas.getContext('2d');
+    const outerCircle = { x: canvas.width / 2, y: canvas.height / 2, radius: 200 };
+
+    // --- UI Elements ---
+    const audioInput = document.getElementById('audioInput');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const seekBar = document.getElementById('seekBar');
     const saveForm = document.getElementById('saveForm');
     const saveButton = document.getElementById('saveButton');
     const downloadLink = document.getElementById('downloadLink');
 
-    const audioInput = document.getElementById('audioInput');
-    const audioPlayer = document.getElementById('audioPlayer');
-    const playPauseBtn = document.getElementById('playPauseBtn');
-    const timeDisplay = document.getElementById('timeDisplay');
-    const seekBar = document.getElementById('seekBar');
-    const controls = document.getElementById('controls');
+    // --- Track Data Arrays ---
+    let audioFiles = [];      // {name, url}
+    let audioPlayers = [];    // individual HTMLAudioElement for each track.
+    let soundDots = [];       // ball positions and settings per track.
+    let positionLogs = [];    // array of logs per track ([time in ms, angle in degrees]).
 
-    const outerCircle = {
-      x: canvas.width / 2,
-      y: canvas.height / 2,
-      radius: 200,
-    };
+    // --- Global Playback Variables ---
+    let globalStartTime = 0;  // timestamp when playback started/resumed.
+    let globalTime = 0;       // current global time in ms.
+    let globalDuration = 0;   // maximum of (audio duration*1000 + delay) across tracks.
+    let globalTimerId = null; // requestAnimationFrame id.
 
-    let audioFiles = [];
-    let soundDots = [];
-    let positionLogs = [];
-    let loggingInterval = null;
-
-    // When a file is uploaded, create a new audio track entry and corresponding ball.
+    // --- File Upload & Track Setup ---
     audioInput.addEventListener('change', handleFileUpload);
     function handleFileUpload(event) {
       const file = event.target.files[0];
       if (file) {
         const fileURL = URL.createObjectURL(file);
         const fileIndex = audioFiles.length;
+        audioFiles.push({ name: file.name, url: fileURL });
 
-        audioFiles.push({
-          name: file.name,
-          url: fileURL,
-        });
+        // Create a hidden audio element for this track.
+        const newAudio = new Audio(fileURL);
+        newAudio.classList.add('hidden-audio');
+        document.body.appendChild(newAudio);
+        audioPlayers.push(newAudio);
+        newAudio.addEventListener('loadedmetadata', updateGlobalDuration);
+        newAudio.load();
 
-        // Set initial position at 90° (converted to radians).
+        // Create a ball (soundDot) with initial position at 90°.
         const initialAngle = (90 * Math.PI) / 180;
         soundDots.push({
           x: outerCircle.x + outerCircle.radius * Math.cos(initialAngle),
           y: outerCircle.y + outerCircle.radius * Math.sin(initialAngle),
-          radius: 20,      // detection radius for dragging
-          dragging: false, // whether the ball is being dragged
-          edited: false,   // flag indicating if user has manually edited this ball
+          radius: 20,
+          dragging: false,
+          edited: false,
           fileIndex,
           angle: initialAngle,
-          color: '#0000ff', // default blue
-          delay: 0,
+          color: '#0000ff',
+          delay: 0
         });
 
-        // Record an initial log entry at time 0.
+        // Initialize log for this track.
         positionLogs.push([[0, Math.round(radiansToDegrees(initialAngle))]]);
         addTrackControl(file.name, fileIndex);
-
-        // Load first file for playback.
-        if (audioFiles.length === 1) {
-          audioPlayer.src = fileURL;
-          controls.style.display = 'block';
-          audioPlayer.load();
-        }
       }
     }
 
-    // Create a track control entry (track name, color picker, delay input).
+    // Compute globalDuration as maximum of (audio duration in ms + delay) among tracks.
+    function updateGlobalDuration() {
+      globalDuration = 0;
+      for (let i = 0; i < audioPlayers.length; i++) {
+        const d = (audioPlayers[i].duration * 1000) + soundDots[i].delay;
+        if (d > globalDuration) globalDuration = d;
+      }
+      updateUI();
+    }
+
+    // --- Track Controls ---
     function addTrackControl(fileName, trackIndex) {
       const trackControlsDiv = document.getElementById('trackControls');
       const trackControlContainer = document.createElement('div');
@@ -178,6 +192,7 @@
       delayInput.value = soundDots[trackIndex].delay;
       delayInput.addEventListener('change', function () {
         soundDots[trackIndex].delay = parseInt(delayInput.value, 10) || 0;
+        updateGlobalDuration();
       });
       delayLabel.appendChild(delayInput);
       trackControlContainer.appendChild(delayLabel);
@@ -185,42 +200,140 @@
       trackControlsDiv.appendChild(trackControlContainer);
     }
 
-    // Play/pause button toggles playback and starts/stops the logging interval.
+    // --- Global Playback Functions ---
     playPauseBtn.addEventListener('click', togglePlayPause);
     function togglePlayPause() {
-      if (audioPlayer.paused) {
-        audioPlayer.play();
+      if (!globalTimerId) {
+        // Start playback.
+        globalStartTime = Date.now() - globalTime;
+        globalTimerId = requestAnimationFrame(globalUpdate);
         playPauseBtn.textContent = 'Pause';
-        startLogging();
+        // Start each audio track if its delay has passed.
+        for (let i = 0; i < audioPlayers.length; i++) {
+          if (globalTime >= soundDots[i].delay) {
+            audioPlayers[i].currentTime = (globalTime - soundDots[i].delay) / 1000;
+            audioPlayers[i].play();
+          }
+        }
       } else {
-        audioPlayer.pause();
+        // Pause playback.
+        cancelAnimationFrame(globalTimerId);
+        globalTimerId = null;
         playPauseBtn.textContent = 'Play';
-        stopLogging();
+        for (let i = 0; i < audioPlayers.length; i++) {
+          audioPlayers[i].pause();
+        }
       }
     }
 
-    // Logging interval runs every 50ms. For each ball that is being dragged,
-    // record its current angle (in degrees) in its log.
-    function startLogging() {
-      let startTime = Date.now() - audioPlayer.currentTime * 1000;
-      loggingInterval = setInterval(() => {
-        const currentTime = Date.now() - startTime;
-        soundDots.forEach((dot, i) => {
-          if (dot.dragging) {
-            // Record the current angle only for dragged balls.
-            const angleInDegrees = Math.round(radiansToDegrees(dot.angle));
-            updateOrAddToLog(i, currentTime, angleInDegrees);
+    function globalUpdate() {
+      globalTime = Date.now() - globalStartTime;
+      if (globalTime >= globalDuration) {
+        globalTime = globalDuration;
+        cancelAnimationFrame(globalTimerId);
+        globalTimerId = null;
+        playPauseBtn.textContent = 'Play';
+        for (let i = 0; i < audioPlayers.length; i++) {
+          audioPlayers[i].pause();
+        }
+        updateUI();
+        return;
+      }
+      updateUI();
+      updateAudioTracks();
+      updateBallPositions();
+      // Record log entries for balls being dragged.
+      soundDots.forEach((dot, i) => {
+        if (dot.dragging) {
+          const angleDeg = Math.round(radiansToDegrees(dot.angle));
+          updateOrAddToLog(i, globalTime, angleDeg);
+        }
+      });
+      drawCircles();
+      globalTimerId = requestAnimationFrame(globalUpdate);
+    }
+
+    function updateUI() {
+      const currentSec = globalTime / 1000;
+      const durationSec = globalDuration / 1000;
+      timeDisplay.textContent = `${formatTime(currentSec)} / ${formatTime(durationSec)}`;
+      seekBar.value = globalDuration ? (globalTime / globalDuration) * 100 : 0;
+    }
+
+    // Update audio tracks only if they are significantly off from the desired time.
+    function updateAudioTracks() {
+      for (let i = 0; i < audioPlayers.length; i++) {
+        if (globalTime >= soundDots[i].delay) {
+          let desiredTime = (globalTime - soundDots[i].delay) / 1000;
+          let currentTime = audioPlayers[i].currentTime;
+          if (Math.abs(desiredTime - currentTime) > 0.1) {
+            audioPlayers[i].currentTime = desiredTime;
           }
-        });
-      }, 50);
+          // Only call play() once when necessary.
+          if (globalTimerId && audioPlayers[i].paused) {
+            audioPlayers[i].play();
+          }
+        } else {
+          audioPlayers[i].pause();
+          audioPlayers[i].currentTime = 0;
+        }
+      }
     }
 
-    function stopLogging() {
-      clearInterval(loggingInterval);
-      loggingInterval = null;
+    // Slider control: when paused, allow user to move the progress bar without starting playback.
+    seekBar.addEventListener('input', () => {
+      globalTime = (seekBar.value / 100) * globalDuration;
+      globalStartTime = Date.now() - globalTime;
+      updateUI();
+      updateBallPositions();
+      drawCircles();
+      for (let i = 0; i < audioPlayers.length; i++) {
+        if (globalTime >= soundDots[i].delay) {
+          audioPlayers[i].currentTime = (globalTime - soundDots[i].delay) / 1000;
+        } else {
+          audioPlayers[i].pause();
+          audioPlayers[i].currentTime = 0;
+        }
+      }
+    });
+
+    // --- Ball (Sound Dot) Position & Logging ---
+    function updateBallPositions() {
+      soundDots.forEach((dot, i) => {
+        if (!dot.dragging) {
+          const interpolatedAngle = interpolateAngleForTrack(i, globalTime);
+          if (interpolatedAngle !== null) {
+            dot.angle = ((interpolatedAngle - 450) % 360) * (Math.PI / 180);
+            dot.x = outerCircle.x + outerCircle.radius * Math.cos(dot.angle);
+            dot.y = outerCircle.y + outerCircle.radius * Math.sin(dot.angle);
+          }
+        }
+      });
     }
 
-    // Update or add a new log entry for a given track (at approximately 50ms intervals).
+    function radiansToDegrees(radians) {
+      return (radians * 180) / Math.PI + 450;
+    }
+
+    function interpolateAngleForTrack(trackIndex, currentTime) {
+      const log = positionLogs[trackIndex];
+      if (log.length === 0) return null;
+      if (currentTime <= log[0][0]) return log[0][1];
+      let prev = log[0], next = null;
+      for (let i = 1; i < log.length; i++) {
+        if (log[i][0] >= currentTime) {
+          next = log[i];
+          prev = log[i - 1];
+          break;
+        }
+      }
+      if (!next) return log[log.length - 1][1];
+      const [t1, a1] = prev;
+      const [t2, a2] = next;
+      const ratio = (currentTime - t1) / (t2 - t1);
+      return a1 + ratio * (a2 - a1);
+    }
+
     function updateOrAddToLog(fileIndex, currentTime, newAngleInDegrees) {
       let log = positionLogs[fileIndex];
       const entryIndex = log.findIndex(([time]) => Math.abs(time - currentTime) < 50);
@@ -232,57 +345,6 @@
       }
     }
 
-    // When audio time updates, update display and update positions for balls not being dragged.
-    audioPlayer.addEventListener('timeupdate', () => {
-      const currentTime = Math.round(audioPlayer.currentTime * 1000);
-      const duration = formatTime(audioPlayer.duration || 0);
-      timeDisplay.textContent = `${formatTime(audioPlayer.currentTime)} / ${duration}`;
-      seekBar.value = (audioPlayer.currentTime / audioPlayer.duration) * 100 || 0;
-
-      soundDots.forEach((dot, i) => {
-        if (!dot.dragging) {
-          // If not being dragged, update position based on recorded log.
-          const interpolatedAngle = interpolateAngleForTrack(i, currentTime);
-          if (interpolatedAngle !== null) {
-            // Convert degrees to radians.
-            dot.angle = ((interpolatedAngle - 450) % 360) * (Math.PI / 180);
-            dot.x = outerCircle.x + outerCircle.radius * Math.cos(dot.angle);
-            dot.y = outerCircle.y + outerCircle.radius * Math.sin(dot.angle);
-          }
-        }
-      });
-      drawCircles();
-    });
-
-    // Convert radians to degrees (using same offset logic as before).
-    function radiansToDegrees(radians) {
-      return (radians * 180) / Math.PI + 450;
-    }
-
-    // For a given track and current time, linearly interpolate the angle from its log.
-    function interpolateAngleForTrack(trackIndex, currentTime) {
-      const log = positionLogs[trackIndex];
-      if (log.length === 0) return null;
-      let prev = null;
-      let next = null;
-      for (let i = 0; i < log.length; i++) {
-        const [time] = log[i];
-        if (time <= currentTime) {
-          prev = log[i];
-        } else {
-          next = log[i];
-          break;
-        }
-      }
-      if (!prev) return null;
-      if (!next) return prev[1];
-      const [t1, a1] = prev;
-      const [t2, a2] = next;
-      const ratio = (currentTime - t1) / (t2 - t1);
-      return a1 + ratio * (a2 - a1);
-    }
-
-    // Normalize a log so that entries occur at exact 50ms intervals.
     function normalizeLog(recorded, interval = 50) {
       if (recorded.length < 2) return recorded;
       const normalized = [];
@@ -302,6 +364,7 @@
       return normalized;
     }
 
+    // --- Canvas Drawing & Dragging ---
     function drawCircles() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       // Draw outer circle.
@@ -322,11 +385,10 @@
       });
     }
 
-    // Increase detection area by 10px for easier dragging.
+    // Dragging handlers.
     canvas.addEventListener('mousedown', (e) => {
       soundDots.forEach(dot => {
         if (Math.hypot(e.offsetX - dot.x, e.offsetY - dot.y) <= dot.radius + 10) {
-          // If the ball is being touched for the first time, clear its log.
           if (!dot.edited) {
             dot.edited = true;
             positionLogs[dot.fileIndex] = [];
@@ -362,7 +424,7 @@
       return `${minutes}:${secs.toString().padStart(2, '0')}`;
     }
 
-    // Save output: for each track, output the track name, delay, and the normalized log.
+    // --- Save Output ---
     saveButton.addEventListener('click', () => {
       const projectName = document.getElementById('projectName').value.trim();
       if (!projectName || audioFiles.length === 0) {
@@ -388,6 +450,7 @@
       saveForm.style.display = "none";
     });
 
+    // Initial draw.
     drawCircles();
   </script>
 </body>
