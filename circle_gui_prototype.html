@@ -153,6 +153,66 @@
       }
     }
 
+    //Smoothing function
+    function smoothPositionLogs(windowSize = 2, maxJump = 10) {
+      positionLogs = positionLogs.map(trackLog => {
+        console.log(trackLog);
+        const smoothed = [];
+        
+        for (let i = 0; i < trackLog.length; i++) {
+          let sum = 0;
+          let count = 0;
+          let currentAngle = trackLog[i][1];
+
+          // Look at the neighboring values around the current one
+          for (let j = i - Math.floor(windowSize / 2); j <= i + Math.floor(windowSize / 2); j++) {
+            if (j >= 0 && j < trackLog.length) {
+              let angle = trackLog[j][1];
+              
+              // Calculate the difference with the previous angle
+              if (j > 0) {
+                const prevAngle = trackLog[j - 1][1];
+                const diff = Math.abs(angle - prevAngle);
+                
+                // If the difference is too large, we ignore this angle and use the previous one
+                if (diff > maxJump) {
+                  angle = prevAngle;
+                }
+              }
+              
+              // Handle crossing 0/360 boundary
+              if (Math.abs(angle - currentAngle) > 180) {
+                if (angle > currentAngle) {
+                  angle -= 360;  // Wrap around to the negative side
+                } else {
+                  angle += 360;  // Wrap around to the positive side
+                }
+              }
+              
+              // Add the angle to the sum for averaging
+              sum += angle;
+              count++;
+            }
+          }
+
+          // Compute the average of the angles in the window
+          let avgAngle = sum / count;
+          
+          // Ensure the average is within a valid 0-360 range
+          if (avgAngle < 0) avgAngle += 360;
+          if (avgAngle >= 360) avgAngle -= 360;
+
+          // Push the smoothed value
+          smoothed.push([trackLog[i][0], Math.round(avgAngle)]);
+        }
+        console.log("__________");
+        console.log(smoothed);
+        return smoothed;
+      });
+    }
+
+
+
     // Compute globalDuration as maximum of (audio duration in ms + delay) among tracks.
     function updateGlobalDuration() {
       globalDuration = 0;
@@ -202,8 +262,12 @@
 
     // --- Global Playback Functions ---
     playPauseBtn.addEventListener('click', togglePlayPause);
+
     function togglePlayPause() {
       if (!globalTimerId) {
+        //Smooth before playing back
+        smoothPositionLogs(); 
+
         // Start playback.
         globalStartTime = Date.now() - globalTime;
         globalTimerId = requestAnimationFrame(globalUpdate);
