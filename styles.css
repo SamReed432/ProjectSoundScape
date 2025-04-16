@@ -12,6 +12,10 @@
     font-style: normal;
 }
 
+.warning {
+  display: none;
+}
+
 html {
     background-image: linear-gradient(to bottom right, rgb(70, 39, 70), rgb(39, 39, 112));
 }
@@ -231,3 +235,34 @@ canvas {
 #downloadLink:hover {
     border-image: linear-gradient(to bottom right, rgb(103, 2, 99), rgb(11, 204, 247)) 1;
   }
+
+
+@media screen and (max-width: 600px) {
+    header {
+        font-size: 0.75rem;
+        height: 8vh;
+    }
+
+    body {
+        font-size: 1vw;
+    }
+
+    h4 {
+      font-size: 2rem;
+    }
+
+    .big_button {
+      padding: 1rem;
+      margin: 1rem 1rem;
+      font-size: 2rem;
+      width: 80%;
+    }
+
+    .warning {
+      margin-top: 0.7rem;
+      display: block;
+      font-size: 1rem;
+      color: rgb(180, 92, 92)
+    }
+  
+}

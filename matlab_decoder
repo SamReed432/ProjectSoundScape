@@ -1,0 +1,46 @@
+function [locations, trackNames, delays] = decodeSoundscape(filename)
+    fid = fopen(filename, 'r');
+    if fid == -1
+        error('Failed to open file.');
+    end
+
+    header = strtrim(fgetl(fid));
+    if ~strcmp(header, 'SOUNDSCAPE_LOCATION_FILE_v1')
+        error('Invalid file format.');
+    end
+
+    trackCount = str2double(fgetl(fid));
+    locations = cell(trackCount, 1);
+    trackNames = strings(trackCount, 1);
+    delays = zeros(trackCount, 1);
+
+    trackIdx = 0;
+    while ~feof(fid)
+        line = strtrim(fgetl(fid));
+        if isempty(line)
+            continue;
+        end
+        if contains(line, '.mp3')
+            trackIdx = trackIdx + 1;
+            trackNames(trackIdx) = line;
+
+            delayLine = strtrim(fgetl(fid));
+            delays(trackIdx) = str2double(erase(delayLine, 'ms'));
+
+            data = [];
+            while ~feof(fid)
+                pos = ftell(fid);
+                nextLine = strtrim(fgetl(fid));
+                if isempty(nextLine) || contains(nextLine, '.mp3')
+                    fseek(fid, pos, 'bof');  % rewind if new track starts
+                    break;
+                end
+                coords = sscanf(nextLine, '%f,%f');
+                data(end+1, :) = coords'; %#ok<AGROW>
+            end
+            locations{trackIdx} = data;
+        end
+    end
+
+    fclose(fid);
+end
