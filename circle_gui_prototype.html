@@ -492,24 +492,42 @@
         alert("Please enter a Project Name and upload at least one audio file.");
         return;
       }
-      let fileContent = "SOUNDSCAPE_LOCATION_FILE_v1\n" + projectName + "\n50ms\n";
+
+      // File header
+      let fileContent = "SOUNDSCAPE_LOCATION_FILE_v1\n";
+      fileContent += projectName + "\n";
+      fileContent += "50ms\n"; // sample rate
+
+
+      // Append each audio file's metadata and its normalized position log
       audioFiles.forEach((audio, i) => {
+        if (positionLogs[i].length === 0) {
+          positionLogs[i].push([0, Math.round(radiansToDegrees(soundDots[i].angle))]);
+        }
+
         fileContent += audio.name + "\n";
         fileContent += soundDots[i].delay + "ms\n";
+        fileContent += soundDots[i].color + "\n";
+
         const normLog = normalizeLog(positionLogs[i], 50);
         normLog.forEach(entry => {
-          fileContent += entry[0] + "," + entry[1] + "\n";
+          fileContent += entry[0] + "," + entry[1] % 360 + "\n";
         });
-        fileContent += "\n";
+
+        fileContent += "\n"; // Separate each sound block with an empty line
       });
+
+      // Create and link the downloadable file
       const blob = new Blob([fileContent], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       downloadLink.href = url;
       downloadLink.download = `${projectName}.txt`;
       downloadLink.style.display = "inline-block";
       downloadLink.textContent = "Download SoundScape File";
-      saveForm.style.display = "none";
+      // Optional: hide the save form if needed
+      // saveForm.style.display = "none";
     });
+
 
     // Initial draw.
     drawCircles();
