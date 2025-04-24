@@ -141,7 +141,8 @@
           fileIndex,
           angle: initialAngle,
           color: '#0000ff',
-          delay: 0
+          delay: 0,
+          looping: false,
         });
 
         // Initialize log for this track.
@@ -253,6 +254,23 @@
       });
       delayLabel.appendChild(delayInput);
       trackControlContainer.appendChild(delayLabel);
+
+
+      const loopingLabel = document.createElement('label');
+      loopingLabel.textContent = 'Looping: ';
+      const loopingInput = document.createElement('input');
+      loopingInput.type = 'checkbox';
+      loopingInput.checked = soundDots[trackIndex].looping;
+      loopingInput.addEventListener('change', function () {
+        soundDots[trackIndex].looping = loopingInput.checked;
+        if (loopingInput.checked) {
+          audioPlayers[trackIndex].loop = true;
+        } else {
+          audioPlayers[trackIndex].loop = false;
+        }
+      });
+      loopingLabel.appendChild(loopingInput);
+      trackControlContainer.appendChild(loopingLabel);
 
       trackControlsDiv.appendChild(trackControlContainer);
     }
@@ -508,6 +526,7 @@
         fileContent += audio.name + "\n";
         fileContent += soundDots[i].delay + "ms\n";
         fileContent += soundDots[i].color + "\n";
+        fileContent += soundDots[i].looping + "\n";
 
         const normLog = normalizeLog(positionLogs[i], 50);
         normLog.forEach(entry => {
